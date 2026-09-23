@@ -1,13 +1,42 @@
 cities:
   - slug: karachi
     city: Karachi
-    country: Pakistan
+    country: Pakistán
     iso3: PAK
     lat: 24.8607
     lon: 67.0011
     population: "≈ 21,4 millones"
-    location: "Sur de Pakistán, costa del mar Arábigo"
-    physical_reference: "Mar Arábigo; al oeste del delta del Indo"
-    narrative: "Principal puerto y mayor centro económico de Pakistán. Su posición sobre el mar Arábigo conecta el valle del Indo con las rutas del océano Índico."
+    location: "Sur del país, costa del mar Arábigo"
+    physical_reference: "Mar Arábigo; oeste del delta del Indo"
+    narrative: "Principal puerto de Pakistán. Su posición sobre el mar Arábigo conecta el valle del Indo con las rutas del océano Índico."
     map_asset: "assets/maps/PAK.geojson"
-    viewport: [60.5, 23.0, 77.5, 37.3]
+    viewport: [61.0, 23.1, 75.8, 36.9]
+    country_label:
+      text: "PAKISTÁN"
+      lon: 69.8
+      lat: 30.5
+    labels:
+      - text: "Afganistán"
+        lon: 65.3
+        lat: 34.2
+        anchor: "middle"
+      - text: "India"
+        lon: 75.0
+        lat: 29.6
+        anchor: "end"
+      - text: "Mar Arábigo"
+        lon: 66.0
+        lat: 23.65
+        anchor: "middle"
+    river:
+      name: "Indo"
+      label_lon: 69.2
+      label_lat: 28.0
+      points:
+        - [72.7, 35.7]
+        - [72.2, 33.6]
+        - [71.6, 31.6]
+        - [70.9, 29.7]
+        - [69.9, 27.9]
+        - [68.8, 26.0]
+        - [67.8, 24.5]
