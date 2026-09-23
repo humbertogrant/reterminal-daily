@@ -50,8 +50,7 @@ def format_market(name: str, item: dict) -> tuple[str, str, str | None]:
         delta_shown = "0 bp" if abs(bp) < 0.5 else f"{bp:+.0f} bp"
     else:
         pct = float(delta["value"])
-        pct = 0.0 if abs(pct) < 0.005 else pct
-        delta_shown = f"{pct:+.2f}%"
+        delta_shown = "0.00%" if abs(pct) < 0.005 else f"{pct:+.2f}%"
 
     return shown, delta_shown, item.get("observation_date")
 
