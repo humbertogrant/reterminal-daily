@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "output"
 OUT.mkdir(exist_ok=True)
 
+DEFAULT_FAMILY = "Noto Sans CJK JP,DejaVu Sans,Arial,sans-serif"
+
 
 def esc(value: object) -> str:
     return html.escape(str(value), quote=True)
@@ -21,15 +23,15 @@ def esc(value: object) -> str:
 
 def svg_text(x, y, value, size, weight=700, anchor="start", fill="#000") -> str:
     return (
-        f'<text x="{x}" y="{y}" font-family="DejaVu Sans,Arial,sans-serif" '
+        f'<text x="{x}" y="{y}" font-family="{DEFAULT_FAMILY}" '
         f'font-size="{size}" font-weight="{weight}" text-anchor="{anchor}" '
         f'fill="{fill}">{esc(value)}</text>'
     )
 
 
-def format_market(name: str, item: dict) -> tuple[str, str, str]:
+def format_market(name: str, item: dict) -> tuple[str, str, str | None]:
     if item["value"] is None:
-        return "N/D", "", item.get("observation_date") or "sin dato"
+        return "N/D", "", None
 
     value = float(item["value"])
     if name in {"UST_2Y", "UST_10Y", "REAL_10Y"}:
@@ -47,7 +49,7 @@ def format_market(name: str, item: dict) -> tuple[str, str, str]:
     else:
         delta_shown = f"{delta['value']:+.2f}%"
 
-    return shown, delta_shown, item["observation_date"]
+    return shown, delta_shown, item.get("observation_date")
 
 
 def wrap(text_value: str, max_chars: int, max_lines: int) -> list[str]:
@@ -68,8 +70,9 @@ def wrap(text_value: str, max_chars: int, max_lines: int) -> list[str]:
     return lines[:max_lines]
 
 
-def education_block() -> tuple[str, list[str]]:
-    if date.today().toordinal() % 2 == 0:
+def education_block(edition_date: str) -> tuple[str, list[str]]:
+    local_day = date.fromisoformat(edition_date)
+    if local_day.toordinal() % 2 == 0:
         return "japanese", [
             "JAPONÉS · N5",
             "Traduce usando いちばん:",
@@ -110,7 +113,11 @@ def main() -> None:
         svg.append(svg_text(18, y, labels[name], typ["market_label"], 800))
         svg.append(svg_text(300, y, value, typ["market_value"], 800, "end"))
         svg.append(svg_text(322, y, delta, typ["market_delta"], 800))
-        if item.get("observation_date") != validated["expected_close_date"] and obs_date:
+        if (
+            obs_date
+            and obs_date != validated["expected_close_date"]
+            and len(obs_date) >= 10
+        ):
             svg.append(svg_text(486, y, obs_date[5:], 9, 700, "end", "#555"))
         if idx < 5:
             svg.append(
@@ -119,7 +126,7 @@ def main() -> None:
             )
 
     svg += [
-        svg_text(516, 34, validated["edition_date"].upper(), 21, 800),
+        svg_text(516, 34, validated["edition_date"], 21, 800),
         '<line x1="514" y1="46" x2="786" y2="46" stroke="#000" stroke-width="1.5"/>',
         svg_text(516, 72, "LECTURA", typ["reading_heading"], 800),
         svg_text(516, 96, "Hechos", 13, 800),
@@ -142,7 +149,7 @@ def main() -> None:
                 )
             )
 
-    kind, block = education_block()
+    kind, block = education_block(validated["edition_date"])
     if kind == "japanese":
         svg += [
             svg_text(18, 326, block[0], typ["education_heading"], 800),
@@ -174,7 +181,9 @@ def main() -> None:
 
         points = load_polygon(ROOT / city["map_asset"])
         mapped = project(points, city["viewport"], 605, 318, 174, 132)
-        svg.append(f'<path d="{svg_path(mapped)}" fill="none" stroke="#000" stroke-width="1.8"/>')
+        svg.append(
+            f'<path d="{svg_path(mapped)}" fill="none" stroke="#000" stroke-width="1.8"/>'
+        )
         min_lon, min_lat, max_lon, max_lat = city["viewport"]
         cx = 605 + (city["lon"] - min_lon) / (max_lon - min_lon) * 174
         cy = 318 + 132 - (city["lat"] - min_lat) / (max_lat - min_lat) * 132
