@@ -17,7 +17,7 @@ OUT = ROOT / "output"
 OUT.mkdir(exist_ok=True)
 
 HEADERS = {
-    "User-Agent": "reterminal-daily/0.1 (+https://github.com/humbertogrant/reterminal-daily)"
+    "User-Agent": "Mozilla/5.0 reterminal-daily/0.2 (+https://github.com/humbertogrant/reterminal-daily)"
 }
 
 
@@ -28,8 +28,16 @@ def get_text(url: str) -> str:
 
 
 def parse_date(value: str) -> str | None:
-    value = " ".join(value.split())
-    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%b %d, %Y", "%B %d, %Y", "%Y-%m-%d"):
+    value = " ".join(value.replace("\xa0", " ").split())
+    for fmt in (
+        "%m/%d/%Y",
+        "%m/%d/%y",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%d %b %Y",
+        "%d %B %Y",
+        "%Y-%m-%d",
+    ):
         try:
             return datetime.strptime(value, fmt).date().isoformat()
         except ValueError:
@@ -38,8 +46,14 @@ def parse_date(value: str) -> str | None:
 
 
 def number(value: str) -> float | None:
-    cleaned = value.replace("$", "").replace(",", "").replace("%", "").strip()
-    if cleaned in {"", ".", "N/A", "NA", "-"}:
+    cleaned = (
+        value.replace("$", "")
+        .replace(",", "")
+        .replace("%", "")
+        .replace("\xa0", " ")
+        .strip()
+    )
+    if cleaned in {"", ".", "N/A", "NA", "-", "null"}:
         return None
     try:
         return float(cleaned)
@@ -57,10 +71,18 @@ def fred(url: str, series_id: str) -> list[dict]:
     text = get_text(url)
     rows = []
     for row in csv.DictReader(io.StringIO(text)):
+        date_raw = (
+            row.get("observation_date")
+            or row.get("DATE")
+            or row.get("date")
+            or ""
+        )
         val = number(row.get(series_id, ""))
-        obs_date = parse_date(row.get("DATE", ""))
+        obs_date = parse_date(date_raw)
         if obs_date and val is not None:
             rows.append({"date": obs_date, "value": val})
+    if not rows:
+        raise RuntimeError(f"FRED {series_id}: no observations parsed")
     return latest_two(rows)
 
 
@@ -70,7 +92,10 @@ def treasury(url: str, wanted: dict[str, str]) -> dict[str, list[dict]]:
     if table is None:
         raise RuntimeError("Treasury table not found")
 
-    header_cells = table.find("tr").find_all(["th", "td"])
+    first_row = table.find("tr")
+    if first_row is None:
+        raise RuntimeError("Treasury header row not found")
+    header_cells = first_row.find_all(["th", "td"])
     headers = [" ".join(c.get_text(" ", strip=True).split()) for c in header_cells]
     index = {name.lower(): i for i, name in enumerate(headers)}
 
@@ -99,7 +124,11 @@ def treasury(url: str, wanted: dict[str, str]) -> dict[str, list[dict]]:
                 if val is not None:
                     found[series].append({"date": obs_date, "value": val})
 
-    return {series: latest_two(rows) for series, rows in found.items()}
+    result = {series: latest_two(rows) for series, rows in found.items()}
+    for series, rows in result.items():
+        if not rows:
+            raise RuntimeError(f"Treasury {series}: no observations parsed")
+    return result
 
 
 def ishares_acwi(url: str) -> list[dict]:
@@ -118,25 +147,60 @@ def ishares_acwi(url: str) -> list[dict]:
     return [{"date": obs_date, "value": value}]
 
 
-def stooq(url: str) -> list[dict]:
-    text = get_text(url)
-    rows = []
-    for row in csv.DictReader(io.StringIO(text)):
-        obs_date = parse_date(row.get("Date", ""))
-        value = number(row.get("Close", ""))
-        if obs_date and value is not None:
-            rows.append({"date": obs_date, "value": value})
-    return latest_two(rows)
+def stockanalysis_acwi(url: str) -> list[dict]:
+    soup = BeautifulSoup(get_text(url), "html.parser")
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr")
+        if not rows:
+            continue
+        headers = [
+            " ".join(cell.get_text(" ", strip=True).split()).lower()
+            for cell in rows[0].find_all(["th", "td"])
+        ]
+        if "date" not in headers or "close" not in headers:
+            continue
+        date_idx = headers.index("date")
+        close_idx = headers.index("close")
+        observations = []
+        for tr in rows[1:]:
+            cells = [" ".join(c.get_text(" ", strip=True).split()) for c in tr.find_all(["th", "td"])]
+            if max(date_idx, close_idx) >= len(cells):
+                continue
+            obs_date = parse_date(cells[date_idx])
+            close = number(cells[close_idx])
+            if obs_date and close is not None:
+                observations.append({"date": obs_date, "value": close})
+        if observations:
+            return latest_two(observations)
+
+    # HTML structure can change; text fallback remains close-specific.
+    page_text = soup.get_text(" ", strip=True)
+    pattern = re.compile(
+        r"([A-Za-z]{3}\s+\d{1,2},\s+\d{4})\s+"
+        r"[0-9,.]+\s+[0-9,.]+\s+[0-9,.]+\s+([0-9,.]+)\s+"
+        r"[0-9,.]+\s+[-+]?[0-9.]+%",
+        flags=re.IGNORECASE,
+    )
+    observations = []
+    for match in pattern.finditer(page_text):
+        obs_date = parse_date(match.group(1))
+        close = number(match.group(2))
+        if obs_date and close is not None:
+            observations.append({"date": obs_date, "value": close})
+    if not observations:
+        raise RuntimeError("StockAnalysis ACWI history not parsed")
+    return latest_two(observations)
 
 
 def bccr_monex(url: str) -> list[dict]:
     soup = BeautifulSoup(get_text(url), "html.parser")
+
     for table in soup.find_all("table"):
         matrix = [
-            [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
+            [" ".join(c.get_text(" ", strip=True).replace("\xa0", " ").split()) for c in tr.find_all(["th", "td"])]
             for tr in table.find_all("tr")
         ]
-        if not any(cells and "weighted average" in " ".join(cells).lower() for cells in matrix):
+        if not matrix:
             continue
 
         date_positions: dict[int, str] = {}
@@ -148,17 +212,19 @@ def bccr_monex(url: str) -> list[dict]:
             if len(date_positions) >= 2:
                 break
 
-        current_row = next(
-            (
-                cells
-                for cells in matrix
-                if cells
-                and "weighted average" in cells[0].lower()
-                and "previous session" not in cells[0].lower()
-            ),
-            None,
-        )
-        if current_row and date_positions:
+        if not date_positions:
+            continue
+
+        current_row = None
+        for cells in matrix:
+            normalized = [cell.strip().lower() for cell in cells]
+            if any(cell == "weighted average" for cell in normalized) and not any(
+                "previous session" in cell for cell in normalized
+            ):
+                current_row = cells
+                break
+
+        if current_row:
             observations = []
             for idx, obs_date in date_positions.items():
                 if idx < len(current_row):
@@ -173,9 +239,14 @@ def bccr_monex(url: str) -> list[dict]:
 
 def safe(callable_, *args):
     try:
-        return {"ok": True, "observations": callable_(*args)}
+        observations = callable_(*args)
+        return {"ok": True, "observations": observations}
     except Exception as exc:
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "observations": []}
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "observations": [],
+        }
 
 
 def main() -> None:
@@ -234,7 +305,7 @@ def main() -> None:
                 "primary_name": config["acwi"]["primary"]["name"],
                 "primary": safe(ishares_acwi, config["acwi"]["primary"]["url"]),
                 "fallback_name": config["acwi"]["fallback"]["name"],
-                "fallback": safe(stooq, config["acwi"]["fallback"]["url"]),
+                "fallback": safe(stockanalysis_acwi, config["acwi"]["fallback"]["url"]),
             },
             "MONEX": {
                 "primary_name": config["monex"]["primary"]["name"],
@@ -243,7 +314,10 @@ def main() -> None:
         },
     }
 
-    (OUT / "raw.json").write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+    (OUT / "raw.json").write_text(
+        json.dumps(raw, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":
