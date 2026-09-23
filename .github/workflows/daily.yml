@@ -1,6 +1,8 @@
 name: E1001 daily
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
