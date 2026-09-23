@@ -83,12 +83,16 @@ def reading(markets: dict, expected: str) -> dict:
     y2, r10 = move("UST_2Y"), move("REAL_10Y")
     if y2 is not None and r10 is not None:
         facts.append(f"2Y {y2:+.0f} pb; real 10Y {r10:+.0f} pb.")
+    def pct_label(value: float) -> str:
+        clean = 0.0 if abs(value) < 0.005 else value
+        return f"{clean:+.2f}%"
+
     sp, acwi = move("SP500"), move("ACWI")
     if sp is not None and acwi is not None:
-        facts.append(f"S&P 500 {sp:+.2f}%; ACWI {acwi:+.2f}%.")
+        facts.append(f"S&P 500 {pct_label(sp)}; ACWI {pct_label(acwi)}.")
     monex = markets["MONEX"]
     if monex.get("value") is not None:
-        facts.append(f"MONEX: ₡{monex['value']:.2f} por dólar.")
+        facts.append(f"MONEX: {monex['value']:.2f} CRC/USD.")
 
     misaligned = [
         name
