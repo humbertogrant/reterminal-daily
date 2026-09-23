@@ -12,6 +12,11 @@ REQUIRED = {"UST_2Y", "UST_10Y", "REAL_10Y", "SP500", "ACWI", "MONEX"}
 ALLOWED = {"verified", "fallback_verified", "stale_last_good", "unavailable"}
 
 
+def assert_png(name: str) -> None:
+    image = Image.open(OUT / name)
+    assert image.size == (800, 480), f"{name}: wrong PNG size {image.size}"
+
+
 def main() -> None:
     manifest = json.loads((OUT / "latest_manifest.json").read_text(encoding="utf-8"))
     markets = manifest.get("markets", {})
@@ -39,19 +44,33 @@ def main() -> None:
             + "; ".join(quality.get("reasons", []))
         )
 
-    image = Image.open(OUT / "latest.png")
-    assert image.size == (800, 480), f"Wrong PNG size: {image.size}"
+    assert_png("latest.png")
+    assert_png("japanese_test.png")
 
     svg = (OUT / "latest.svg").read_text(encoding="utf-8")
+    jp_svg = (OUT / "japanese_test.svg").read_text(encoding="utf-8")
+
     assert 'clipPath id="narrativeClip"' in svg, "Narrative clipping guard missing"
     assert 'width="800" height="480"' in svg, "SVG canvas is not 800x480"
     assert "Noto Sans CJK JP" in svg, "Japanese-capable font family missing"
     assert "sin dato" not in svg.lower(), "Unavailable date text leaked into SVG"
 
+    assert "JAPONÉS · N5" in jp_svg, "Forced Japanese test did not render Japanese mode"
+    assert "いちばん" in jp_svg, "Japanese prompt missing"
+    assert "この本がいちばん高いです。" in jp_svg, "Japanese answer missing"
+    assert "Noto Sans CJK JP" in jp_svg, "Japanese test lacks CJK font family"
+
+    # Avoid editorially meaningless negative zero.
+    assert "-0.00%" not in svg, "Negative zero leaked into production SVG"
+    assert "-0.00%" not in jp_svg, "Negative zero leaked into Japanese test SVG"
+
     font_sizes = [float(x) for x in re.findall(r'font-size="([0-9.]+)"', svg)]
     assert font_sizes and min(font_sizes) >= 8, "Typography fell below 8 px"
 
-    print(f"Acceptance PASS: quality={status}; PNG 800x480; SVG guards present.")
+    print(
+        f"Acceptance PASS: quality={status}; latest + Japanese test 800x480; "
+        "SVG guards and zero normalization present."
+    )
 
 
 if __name__ == "__main__":
