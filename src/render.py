@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import html
 import json
 from datetime import date
@@ -45,9 +46,12 @@ def format_market(name: str, item: dict) -> tuple[str, str, str | None]:
     if not delta:
         delta_shown = "N/D"
     elif delta["unit"] == "bp":
-        delta_shown = f"{delta['value']:+.0f} bp"
+        bp = float(delta["value"])
+        delta_shown = "0 bp" if abs(bp) < 0.5 else f"{bp:+.0f} bp"
     else:
-        delta_shown = f"{delta['value']:+.2f}%"
+        pct = float(delta["value"])
+        pct = 0.0 if abs(pct) < 0.005 else pct
+        delta_shown = f"{pct:+.2f}%"
 
     return shown, delta_shown, item.get("observation_date")
 
@@ -70,9 +74,14 @@ def wrap(text_value: str, max_chars: int, max_lines: int) -> list[str]:
     return lines[:max_lines]
 
 
-def education_block(edition_date: str) -> tuple[str, list[str]]:
-    local_day = date.fromisoformat(edition_date)
-    if local_day.toordinal() % 2 == 0:
+def education_block(edition_date: str, forced: str) -> tuple[str, list[str]]:
+    if forced in {"japanese", "geography"}:
+        kind = forced
+    else:
+        local_day = date.fromisoformat(edition_date)
+        kind = "japanese" if local_day.toordinal() % 2 == 0 else "geography"
+
+    if kind == "japanese":
         return "japanese", [
             "JAPONÉS · N5",
             "Traduce usando いちばん:",
@@ -83,7 +92,23 @@ def education_block(edition_date: str) -> tuple[str, list[str]]:
     return "geography", []
 
 
+def project_point(lon: float, lat: float, viewport: list[float], x: float, y: float, width: float, height: float) -> tuple[float, float]:
+    return project([(lon, lat)], viewport, x, y, width, height)[0]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--education-mode",
+        choices=("auto", "japanese", "geography"),
+        default="auto",
+    )
+    parser.add_argument("--output-prefix", default="latest")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     validated = json.loads((OUT / "validated.json").read_text(encoding="utf-8"))
     layout = yaml.safe_load((ROOT / "config" / "layout.yaml").read_text(encoding="utf-8"))
     cities = yaml.safe_load((ROOT / "config" / "cities.yaml").read_text(encoding="utf-8"))
@@ -98,10 +123,13 @@ def main() -> None:
         "MONEX": "MONEX",
     }
 
+    clip_right = float(layout["layout"]["narrative_clip_right"])
+    clip_width = max(10.0, clip_right - 320.0)
+
     svg = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480">',
         '<rect width="800" height="480" fill="#fff"/>',
-        '<defs><clipPath id="narrativeClip"><rect x="330" y="320" width="244" height="138"/></clipPath></defs>',
+        f'<defs><clipPath id="narrativeClip"><rect x="320" y="318" width="{clip_width:.1f}" height="140"/></clipPath></defs>',
         '<line x1="500" y1="0" x2="500" y2="292" stroke="#000" stroke-width="2"/>',
         '<line x1="0" y1="292" x2="800" y2="292" stroke="#000" stroke-width="2.5"/>',
     ]
@@ -113,11 +141,7 @@ def main() -> None:
         svg.append(svg_text(18, y, labels[name], typ["market_label"], 800))
         svg.append(svg_text(300, y, value, typ["market_value"], 800, "end"))
         svg.append(svg_text(322, y, delta, typ["market_delta"], 800))
-        if (
-            obs_date
-            and obs_date != validated["expected_close_date"]
-            and len(obs_date) >= 10
-        ):
+        if obs_date and obs_date != validated["expected_close_date"] and len(obs_date) >= 10:
             svg.append(svg_text(486, y, obs_date[5:], 9, 700, "end", "#555"))
         if idx < 5:
             svg.append(
@@ -149,7 +173,7 @@ def main() -> None:
                 )
             )
 
-    kind, block = education_block(validated["edition_date"])
+    kind, block = education_block(validated["edition_date"], args.education_mode)
     if kind == "japanese":
         svg += [
             svg_text(18, 326, block[0], typ["education_heading"], 800),
@@ -160,7 +184,7 @@ def main() -> None:
         ]
     else:
         city = cities["cities"][0]
-        divider_x = layout["layout"]["map_divider_x"]
+        divider_x = float(layout["layout"]["map_divider_x"])
         svg.append(
             f'<line x1="{divider_x}" y1="306" x2="{divider_x}" y2="464" '
             'stroke="#000" stroke-width="1.5"/>'
@@ -173,22 +197,95 @@ def main() -> None:
             svg_text(18, 431, city["physical_reference"], 13, 650),
         ]
 
-        narrative = wrap(city["narrative"], 35, 4)
+        narrative = wrap(city["narrative"], 32, 4)
         svg.append('<g clip-path="url(#narrativeClip)">')
         for i, line in enumerate(narrative):
-            svg.append(svg_text(330, 340 + i * 21, line, 13, 650))
+            svg.append(svg_text(320, 340 + i * 21, line, 13, 650))
         svg.append("</g>")
 
+        map_x, map_y, map_w, map_h = divider_x + 10, 316, 210, 138
+        viewport = city["viewport"]
+
         points = load_polygon(ROOT / city["map_asset"])
-        mapped = project(points, city["viewport"], 605, 318, 174, 132)
+        mapped = project(points, viewport, map_x, map_y, map_w, map_h)
         svg.append(
-            f'<path d="{svg_path(mapped)}" fill="none" stroke="#000" stroke-width="1.8"/>'
+            f'<path d="{svg_path(mapped)}" fill="#fafafa" stroke="#000" stroke-width="1.8"/>'
         )
-        min_lon, min_lat, max_lon, max_lat = city["viewport"]
-        cx = 605 + (city["lon"] - min_lon) / (max_lon - min_lon) * 174
-        cy = 318 + 132 - (city["lat"] - min_lat) / (max_lat - min_lat) * 132
+
+        river = city.get("river")
+        if river and river.get("points"):
+            river_points = project(
+                [(float(lon), float(lat)) for lon, lat in river["points"]],
+                viewport,
+                map_x,
+                map_y,
+                map_w,
+                map_h,
+            )
+            river_d = " ".join(
+                [f"M {river_points[0][0]:.1f} {river_points[0][1]:.1f}"]
+                + [f"L {x:.1f} {y:.1f}" for x, y in river_points[1:]]
+            )
+            svg.append(
+                f'<path d="{river_d}" fill="none" stroke="#777" stroke-width="1.15"/>'
+            )
+            rx, ry = project_point(
+                float(river["label_lon"]),
+                float(river["label_lat"]),
+                viewport,
+                map_x,
+                map_y,
+                map_w,
+                map_h,
+            )
+            svg.append(svg_text(rx + 3, ry - 3, river["name"], 9, 650, fill="#666"))
+
+        country_label = city.get("country_label")
+        if country_label:
+            lx, ly = project_point(
+                float(country_label["lon"]),
+                float(country_label["lat"]),
+                viewport,
+                map_x,
+                map_y,
+                map_w,
+                map_h,
+            )
+            svg.append(svg_text(lx, ly, country_label["text"], 10, 750, "middle", "#555"))
+
+        for label in city.get("labels", []):
+            lx, ly = project_point(
+                float(label["lon"]),
+                float(label["lat"]),
+                viewport,
+                map_x,
+                map_y,
+                map_w,
+                map_h,
+            )
+            svg.append(
+                svg_text(
+                    lx,
+                    ly,
+                    label["text"],
+                    9,
+                    650,
+                    label.get("anchor", "start"),
+                    "#666",
+                )
+            )
+
+        cx, cy = project_point(
+            float(city["lon"]),
+            float(city["lat"]),
+            viewport,
+            map_x,
+            map_y,
+            map_w,
+            map_h,
+        )
         svg.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="4.2" fill="#000"/>')
-        svg.append(svg_text(cx + 7, cy + 4, city["city"], 11, 800))
+        svg.append(svg_text(cx + 7, cy + 3, city["city"], 10, 800))
 
     svg += [
         '<line x1="0" y1="470" x2="800" y2="470" stroke="#000" stroke-width="1"/>',
@@ -198,10 +295,12 @@ def main() -> None:
     ]
 
     svg_output = "\n".join(svg)
-    (OUT / "latest.svg").write_text(svg_output, encoding="utf-8")
+    svg_path_out = OUT / f"{args.output_prefix}.svg"
+    png_path_out = OUT / f"{args.output_prefix}.png"
+    svg_path_out.write_text(svg_output, encoding="utf-8")
     cairosvg.svg2png(
         bytestring=svg_output.encode("utf-8"),
-        write_to=str(OUT / "latest.png"),
+        write_to=str(png_path_out),
         output_width=800,
         output_height=480,
     )
