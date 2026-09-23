@@ -27,6 +27,9 @@ jobs:
       - name: Cairo + Japanese font runtime
         run: sudo apt-get update && sudo apt-get install -y libcairo2 libpango-1.0-0 fonts-noto-cjk
 
+      - name: Verify Japanese font
+        run: fc-match "Noto Sans CJK JP" | grep -qi "NotoSansCJK"
+
       - name: Install dependencies
         run: pip install "beautifulsoup4>=4.12,<5" "cairosvg>=2.7,<3" "Pillow>=10,<12" "PyYAML>=6,<7" "requests>=2.32,<3"
 
@@ -36,8 +39,11 @@ jobs:
       - name: Validate
         run: python src/validate.py
 
-      - name: Render
+      - name: Render production edition
         run: python src/render.py
+
+      - name: Render forced Japanese test
+        run: python src/render.py --education-mode japanese --output-prefix japanese_test
 
       - name: Acceptance
         run: python src/acceptance.py
@@ -49,6 +55,8 @@ jobs:
           path: |
             output/latest.png
             output/latest.svg
+            output/japanese_test.png
+            output/japanese_test.svg
             output/latest_manifest.json
             output/validated.json
             output/raw.json
