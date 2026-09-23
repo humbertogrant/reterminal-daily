@@ -1,0 +1,15 @@
+[project]
+name = "reterminal-daily"
+version = "0.1.0"
+description = "Deterministic daily 800x480 dashboard for reTerminal E1001"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "cairosvg>=2.7,<3",
+  "Pillow>=10,<12",
+  "PyYAML>=6,<7",
+  "requests>=2.32,<3",
+]
+
+[tool.ruff]
+line-length = 100
