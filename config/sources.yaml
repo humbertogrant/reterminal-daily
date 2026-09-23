@@ -1,0 +1,32 @@
+treasury_nominal:
+  primary:
+    name: U.S. Treasury Daily Treasury Par Yield Curve Rates
+    url: "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve&field_tdr_date_value={year}"
+  fallback:
+    UST_2Y: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2"
+    UST_10Y: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+
+treasury_real:
+  primary:
+    name: U.S. Treasury Daily Treasury Par Real Yield Curve Rates
+    url: "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_real_yield_curve&field_tdr_date_value={year}"
+  fallback:
+    REAL_10Y: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10"
+
+sp500:
+  primary:
+    name: FRED SP500
+    url: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500"
+
+acwi:
+  primary:
+    name: iShares MSCI ACWI ETF
+    url: "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf"
+  fallback:
+    name: StockAnalysis ACWI historical close
+    url: "https://stockanalysis.com/etf/acwi/history/"
+
+monex:
+  primary:
+    name: BCCR - Trade summary in MONEX
+    url: "https://gee.bccr.fi.cr/indicadoreseconomicos/Cuadros/frmVerCatCuadro.aspx?CodCuadro=770&idioma=2"
