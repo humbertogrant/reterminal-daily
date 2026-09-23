@@ -23,6 +23,21 @@ def main() -> None:
         if item["source_status"] != "unavailable":
             assert item.get("observation_date"), f"{name}: missing observation_date"
             assert item.get("value") is not None, f"{name}: missing value"
+            if item.get("previous_value") is not None:
+                assert item.get("delta") is not None, f"{name}: previous value without delta"
+
+    quality = manifest.get("data_quality", {})
+    status = quality.get("status")
+    assert status in {"PASS", "PASS_DEGRADED", "FAIL"}, f"Unknown quality state: {status}"
+    if status == "FAIL":
+        raise AssertionError(
+            "Data quality FAIL: " + "; ".join(quality.get("fatal_reasons", []))
+        )
+    if status == "PASS_DEGRADED":
+        print(
+            "::warning title=E1001 data quality::"
+            + "; ".join(quality.get("reasons", []))
+        )
 
     image = Image.open(OUT / "latest.png")
     assert image.size == (800, 480), f"Wrong PNG size: {image.size}"
@@ -30,11 +45,13 @@ def main() -> None:
     svg = (OUT / "latest.svg").read_text(encoding="utf-8")
     assert 'clipPath id="narrativeClip"' in svg, "Narrative clipping guard missing"
     assert 'width="800" height="480"' in svg, "SVG canvas is not 800x480"
+    assert "Noto Sans CJK JP" in svg, "Japanese-capable font family missing"
+    assert "sin dato" not in svg.lower(), "Unavailable date text leaked into SVG"
 
     font_sizes = [float(x) for x in re.findall(r'font-size="([0-9.]+)"', svg)]
     assert font_sizes and min(font_sizes) >= 8, "Typography fell below 8 px"
 
-    print("Acceptance PASS: six markets, manifest, SVG guards, PNG 800x480.")
+    print(f"Acceptance PASS: quality={status}; PNG 800x480; SVG guards present.")
 
 
 if __name__ == "__main__":
