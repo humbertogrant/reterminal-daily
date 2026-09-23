@@ -1,0 +1,52 @@
+name: E1001 daily spike
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 12 * * *" # 06:10 America/Costa_Rica
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cairo runtime
+        run: sudo apt-get update && sudo apt-get install -y libcairo2 libpango-1.0-0
+
+      - name: Install
+        run: pip install .
+
+      - name: Retrieve
+        run: python src/retrieve.py
+
+      - name: Validate
+        run: python src/validate.py
+
+      - name: Render
+        run: python src/render.py
+
+      - name: Acceptance
+        run: python src/acceptance.py
+
+      - name: Upload spike artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: e1001-\${{ github.run_id }}
+          path: |
+            output/latest.png
+            output/latest.svg
+            output/latest_manifest.json
+            output/raw.json
+          retention-days: 30
