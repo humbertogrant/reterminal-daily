@@ -4,7 +4,7 @@ canvas:
   background: "#ffffff"
 
 typography:
-  family: "DejaVu Sans, Arial, Helvetica, sans-serif"
+  family: "Noto Sans CJK JP, DejaVu Sans, Arial, Helvetica, sans-serif"
   market_label: 20
   market_value: 30
   market_delta: 18
@@ -20,5 +20,5 @@ layout:
   reading_left: 516
   top_bottom: 292
   education_left: 18
-  map_divider_x: 590
-  narrative_clip_right: 574
+  map_divider_x: 570
+  narrative_clip_right: 554
