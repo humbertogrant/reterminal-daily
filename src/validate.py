@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "output"
+LOCAL_TZ = ZoneInfo("America/Costa_Rica")
+
 SERIES = ("UST_2Y", "UST_10Y", "REAL_10Y", "SP500", "ACWI", "MONEX")
 YIELDS = {"UST_2Y", "UST_10Y", "REAL_10Y"}
+CORE = {"UST_2Y", "UST_10Y", "REAL_10Y"}
 
 
 def observations(source: dict) -> list[dict]:
@@ -100,6 +104,36 @@ def reading(markets: dict, expected: str) -> dict:
     return {"facts": facts[:3], "interpretation": interpretation[:2]}
 
 
+def assess_quality(markets: dict, expected: str) -> dict:
+    reasons = []
+    fatal = []
+
+    for name, item in markets.items():
+        status = item["source_status"]
+        if status == "unavailable":
+            reasons.append(f"{name}: unavailable")
+            if name in CORE:
+                fatal.append(f"{name}: core rate unavailable")
+        elif status == "stale_last_good":
+            reasons.append(
+                f"{name}: stale at {item.get('observation_date')} vs expected {expected}"
+            )
+
+        if item.get("value") is not None and item.get("previous_value") is None:
+            reasons.append(f"{name}: no previous verified observation")
+        elif item.get("value") is not None and item.get("delta") is None:
+            reasons.append(f"{name}: delta unavailable")
+
+    if fatal:
+        status = "FAIL"
+    elif reasons:
+        status = "PASS_DEGRADED"
+    else:
+        status = "PASS"
+
+    return {"status": status, "reasons": reasons, "fatal_reasons": fatal}
+
+
 def main() -> None:
     raw = json.loads((OUT / "raw.json").read_text(encoding="utf-8"))
     expected = expected_market_date(raw)
@@ -145,14 +179,18 @@ def main() -> None:
             "delta": delta,
         }
 
+    quality = assess_quality(markets, expected)
     validated = {
-        "edition_date": date.today().isoformat(),
+        "edition_date": datetime.now(LOCAL_TZ).date().isoformat(),
+        "timezone": "America/Costa_Rica",
         "expected_close_date": expected,
+        "data_quality": quality,
         "markets": markets,
         "reading": reading(markets, expected),
     }
-    (OUT / "validated.json").write_text(json.dumps(validated, indent=2, ensure_ascii=False), encoding="utf-8")
-    (OUT / "latest_manifest.json").write_text(json.dumps(validated, indent=2, ensure_ascii=False), encoding="utf-8")
+    serialized = json.dumps(validated, indent=2, ensure_ascii=False)
+    (OUT / "validated.json").write_text(serialized, encoding="utf-8")
+    (OUT / "latest_manifest.json").write_text(serialized, encoding="utf-8")
 
 
 if __name__ == "__main__":
