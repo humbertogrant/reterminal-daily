@@ -84,8 +84,9 @@ def reading(markets: dict, expected: str) -> dict:
     if y2 is not None and r10 is not None:
         facts.append(f"2Y {y2:+.0f} pb; real 10Y {r10:+.0f} pb.")
     def pct_label(value: float) -> str:
-        clean = 0.0 if abs(value) < 0.005 else value
-        return f"{clean:+.2f}%"
+        if abs(value) < 0.005:
+            return "0.00%"
+        return f"{value:+.2f}%"
 
     sp, acwi = move("SP500"), move("ACWI")
     if sp is not None and acwi is not None:
