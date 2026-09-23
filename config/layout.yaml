@@ -1,0 +1,24 @@
+canvas:
+  width: 800
+  height: 480
+  background: "#ffffff"
+
+typography:
+  family: "DejaVu Sans, Arial, Helvetica, sans-serif"
+  market_label: 20
+  market_value: 30
+  market_delta: 18
+  reading_heading: 20
+  reading_body: 12
+  education_heading: 23
+  education_body: 15
+  japanese_answer: 12
+  footer: 8
+
+layout:
+  market_right: 500
+  reading_left: 516
+  top_bottom: 292
+  education_left: 18
+  map_divider_x: 590
+  narrative_clip_right: 574
