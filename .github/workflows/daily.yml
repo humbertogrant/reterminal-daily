@@ -1,4 +1,4 @@
-name: E1001 daily spike
+name: E1001 daily
 
 on:
   pull_request:
@@ -9,11 +9,17 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: e1001-daily-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - name: Checkout
@@ -48,7 +54,7 @@ jobs:
       - name: Acceptance
         run: python src/acceptance.py
 
-      - name: Upload spike artifacts
+      - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@v4
         with:
           name: e1001-${{ github.run_id }}
@@ -61,3 +67,74 @@ jobs:
             output/validated.json
             output/raw.json
           retention-days: 30
+
+      - name: Build Pages bundle
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p site
+          cp output/latest.png site/latest.png
+          cp output/latest.svg site/latest.svg
+          cp output/latest_manifest.json site/latest_manifest.json
+          cp output/validated.json site/validated.json
+
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="es">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
+            <title>reTerminal E1001 daily</title>
+            <style>
+              body {
+                font-family: Arial, Helvetica, sans-serif;
+                margin: 24px;
+                max-width: 900px;
+              }
+              img {
+                width: 800px;
+                max-width: 100%;
+                height: auto;
+                border: 1px solid #bbb;
+              }
+              code {
+                background: #f2f2f2;
+                padding: 2px 4px;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>reTerminal E1001 daily</h1>
+            <p>Última edición validada y publicada por GitHub Actions.</p>
+            <p>
+              <a href="./latest.png">latest.png</a> ·
+              <a href="./latest_manifest.json">manifest</a> ·
+              <a href="./validated.json">validated.json</a>
+            </p>
+            <img src="./latest.png" alt="Última edición del reTerminal E1001">
+          </body>
+          </html>
+          HTML
+
+      - name: Configure Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
