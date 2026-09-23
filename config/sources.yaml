@@ -23,8 +23,8 @@ acwi:
     name: iShares MSCI ACWI ETF
     url: "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf"
   fallback:
-    name: Stooq market-close history
-    url: "https://stooq.com/q/d/l/?s=acwi.us&i=d"
+    name: StockAnalysis ACWI historical close
+    url: "https://stockanalysis.com/etf/acwi/history/"
 
 monex:
   primary:
