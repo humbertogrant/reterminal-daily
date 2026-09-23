@@ -1,6 +1,8 @@
 name: E1001 daily spike
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "10 12 * * *" # 06:10 America/Costa_Rica
@@ -25,8 +27,8 @@ jobs:
       - name: Cairo runtime
         run: sudo apt-get update && sudo apt-get install -y libcairo2 libpango-1.0-0
 
-      - name: Install
-        run: pip install .
+      - name: Install dependencies
+        run: pip install "beautifulsoup4>=4.12,<5" "cairosvg>=2.7,<3" "Pillow>=10,<12" "PyYAML>=6,<7" "requests>=2.32,<3"
 
       - name: Retrieve
         run: python src/retrieve.py
@@ -43,7 +45,7 @@ jobs:
       - name: Upload spike artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: e1001-\${{ github.run_id }}
+          name: e1001-${{ github.run_id }}
           path: |
             output/latest.png
             output/latest.svg
