@@ -1,60 +1,52 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
+
+from market_dates import CLOSE_DATE_POLICY, edition_date, expected_close_date
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "output"
-LOCAL_TZ = ZoneInfo("America/Costa_Rica")
 
 SERIES = ("UST_2Y", "UST_10Y", "REAL_10Y", "SP500", "ACWI", "MONEX")
 YIELDS = {"UST_2Y", "UST_10Y", "REAL_10Y"}
 CORE = {"UST_2Y", "UST_10Y", "REAL_10Y"}
 
 
-def observations(source: dict) -> list[dict]:
+def observations(source: dict, expected: str) -> list[dict]:
     rows = source.get("observations", []) if source else []
-    return sorted(
-        [r for r in rows if r.get("date") and r.get("value") is not None],
-        key=lambda x: x["date"],
-    )
-
-
-def latest(source: dict) -> dict | None:
-    rows = observations(source)
-    return rows[-1] if rows else None
+    # Apply the ceiling to every tier, including last-good selection, and never
+    # treat two entries for the same date as separate daily observations.
+    by_date = {
+        r["date"]: r for r in rows
+        if r.get("date") and r["date"] <= expected and r.get("value") is not None
+    }
+    return [by_date[day] for day in sorted(by_date)]
 
 
 def expected_market_date(raw: dict) -> str:
-    anchors = []
-    for name in ("UST_2Y", "UST_10Y", "REAL_10Y", "SP500", "ACWI"):
-        item = raw["series"][name]
-        for tier in ("primary", "fallback"):
-            if tier in item:
-                row = latest(item[tier])
-                if row:
-                    anchors.append(row["date"])
-    if not anchors:
-        raise RuntimeError("No market-close anchor is available; refusing to render")
-    return max(anchors)
+    return expected_close_date(edition_date(raw["retrieved_at"]))
 
 
 def pick(item: dict, expected: str) -> tuple[str, str, list[dict]]:
-    primary = observations(item.get("primary", {}))
-    fallback = observations(item.get("fallback", {}))
+    primary = observations(item.get("primary", {}), expected)
+    fallback = observations(item.get("fallback", {}), expected)
+
+    def with_previous(history: list[dict]) -> list[dict]:
+        current = history[-1]
+        # Prefer primary values on overlapping dates; use the fallback to fill
+        # history when the primary publishes only one official closing price.
+        prior = {
+            row["date"]: row for row in fallback + primary
+            if row["date"] < current["date"]
+        }
+        return [prior[max(prior)], current] if prior else [current]
 
     if primary and primary[-1]["date"] == expected:
-        history = primary
-        if len(history) < 2 and fallback:
-            previous = [r for r in fallback if r["date"] < expected]
-            if previous:
-                history = [previous[-1], primary[-1]]
-        return "primary", item["primary_name"], history
+        return "primary", item["primary_name"], with_previous(primary)
 
     if fallback and fallback[-1]["date"] == expected:
-        return "fallback", item.get("fallback_name", "fallback"), fallback
+        return "fallback", item.get("fallback_name", "fallback"), with_previous(fallback)
 
     candidates = []
     if primary:
@@ -63,7 +55,7 @@ def pick(item: dict, expected: str) -> tuple[str, str, list[dict]]:
         candidates.append((item.get("fallback_name", "fallback"), fallback))
     if candidates:
         source, history = max(candidates, key=lambda x: x[1][-1]["date"])
-        return "stale", source, history
+        return "stale", source, with_previous(history)
 
     return "unavailable", item.get("primary_name", "unknown"), []
 
@@ -139,8 +131,7 @@ def assess_quality(markets: dict, expected: str) -> dict:
     return {"status": status, "reasons": reasons, "fatal_reasons": fatal}
 
 
-def main() -> None:
-    raw = json.loads((OUT / "raw.json").read_text(encoding="utf-8"))
+def build_manifest(raw: dict) -> dict:
     expected = expected_market_date(raw)
     markets = {}
 
@@ -185,14 +176,21 @@ def main() -> None:
         }
 
     quality = assess_quality(markets, expected)
-    validated = {
-        "edition_date": datetime.now(LOCAL_TZ).date().isoformat(),
+    return {
+        "retrieved_at": raw["retrieved_at"],
+        "edition_date": edition_date(raw["retrieved_at"]),
         "timezone": "America/Costa_Rica",
+        "close_date_policy": CLOSE_DATE_POLICY,
         "expected_close_date": expected,
         "data_quality": quality,
         "markets": markets,
         "reading": reading(markets, expected),
     }
+
+
+def main() -> None:
+    raw = json.loads((OUT / "raw.json").read_text(encoding="utf-8"))
+    validated = build_manifest(raw)
     serialized = json.dumps(validated, indent=2, ensure_ascii=False)
     (OUT / "validated.json").write_text(serialized, encoding="utf-8")
     (OUT / "latest_manifest.json").write_text(serialized, encoding="utf-8")

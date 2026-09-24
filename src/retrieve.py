@@ -61,10 +61,12 @@ def number(value: str) -> float | None:
         return None
 
 
-def latest_two(rows: Iterable[dict]) -> list[dict]:
+def latest_history(rows: Iterable[dict]) -> list[dict]:
     clean = [r for r in rows if r.get("date") and r.get("value") is not None]
+    # Preserve enough history to discard same-day quotes without losing the prior close.
+    clean = list({row["date"]: row for row in clean}.values())
     clean.sort(key=lambda x: x["date"])
-    return clean[-2:]
+    return clean[-32:]
 
 
 def fred(url: str, series_id: str) -> list[dict]:
@@ -83,7 +85,7 @@ def fred(url: str, series_id: str) -> list[dict]:
             rows.append({"date": obs_date, "value": val})
     if not rows:
         raise RuntimeError(f"FRED {series_id}: no observations parsed")
-    return latest_two(rows)
+    return latest_history(rows)
 
 
 def treasury(url: str, wanted: dict[str, str]) -> dict[str, list[dict]]:
@@ -124,7 +126,7 @@ def treasury(url: str, wanted: dict[str, str]) -> dict[str, list[dict]]:
                 if val is not None:
                     found[series].append({"date": obs_date, "value": val})
 
-    result = {series: latest_two(rows) for series, rows in found.items()}
+    result = {series: latest_history(rows) for series, rows in found.items()}
     for series, rows in result.items():
         if not rows:
             raise RuntimeError(f"Treasury {series}: no observations parsed")
@@ -171,7 +173,7 @@ def stockanalysis_acwi(url: str) -> list[dict]:
             if obs_date and close is not None:
                 observations.append({"date": obs_date, "value": close})
         if observations:
-            return latest_two(observations)
+            return latest_history(observations)
 
     # HTML structure can change; text fallback remains close-specific.
     page_text = soup.get_text(" ", strip=True)
@@ -189,7 +191,7 @@ def stockanalysis_acwi(url: str) -> list[dict]:
             observations.append({"date": obs_date, "value": close})
     if not observations:
         raise RuntimeError("StockAnalysis ACWI history not parsed")
-    return latest_two(observations)
+    return latest_history(observations)
 
 
 def bccr_monex(url: str) -> list[dict]:
@@ -232,7 +234,7 @@ def bccr_monex(url: str) -> list[dict]:
                     if val is not None:
                         observations.append({"date": obs_date, "value": val})
             if observations:
-                return latest_two(observations)
+                return latest_history(observations)
 
     raise RuntimeError("BCCR MONEX weighted-average row not found")
 
@@ -251,7 +253,9 @@ def safe(callable_, *args):
 
 def main() -> None:
     config = yaml.safe_load((ROOT / "config" / "sources.yaml").read_text(encoding="utf-8"))
-    year = datetime.now(timezone.utc).year
+    # Freeze the edition before the first network request; later stages reuse it.
+    retrieved_at = datetime.now(timezone.utc)
+    year = retrieved_at.year
 
     nominal = safe(
         treasury,
@@ -265,7 +269,7 @@ def main() -> None:
     )
 
     raw = {
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "retrieved_at": retrieved_at.isoformat(),
         "series": {
             "UST_2Y": {
                 "primary_name": config["treasury_nominal"]["primary"]["name"],

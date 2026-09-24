@@ -35,10 +35,29 @@ The renderer never searches, fetches, fills, interpolates or invents market data
 - **UST 2Y / UST 10Y:** U.S. Treasury Daily Treasury Par Yield Curve Rates → FRED DGS2/DGS10 fallback.
 - **Real 10Y:** U.S. Treasury Daily Treasury Par Real Yield Curve Rates → FRED DFII10 fallback.
 - **S&P 500:** FRED SP500.
-- **ACWI:** iShares Closing Price → market-close fallback (Stooq in the spike).
+- **ACWI:** iShares Closing Price → StockAnalysis historical Close fallback.
 - **MONEX:** BCCR weighted-average daily MONEX rate.
 
 If an expected-date value is unavailable, validation keeps the latest verified observation and exposes its true date. If no verified observation is available in the current retrieval, the spike emits `N/D`; it never substitutes intraday data.
+
+### Daily close policy
+
+The edition date is frozen from the retrieval start timestamp in `America/Costa_Rica`.
+Its expected close is the last XNYS trading session **strictly before** that local
+date, using `exchange-calendars` for weekends and US equity holidays. A delayed
+or afternoon rerun remains the same daily edition; today's quotes never advance
+the expected close. This target is independent of source availability, so a
+delayed source is still marked stale. Treasury and Costa Rica holidays can differ
+from the equity calendar; those older observations keep their actual dates.
+
+Retrieval retains up to 32 distinct observations per source. Validation filters
+every source tier at the expected close before selecting the current and strictly
+earlier previous observation. This preserves ACWI's prior close when its fallback
+table includes an intraday row. Acceptance independently checks the date policy,
+source statuses, and recalculated deltas before publication.
+
+Run the regression suite with `python -m unittest discover -s tests -v`. The same
+suite runs before retrieval in GitHub Actions.
 
 ## Visual contract
 
