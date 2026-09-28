@@ -73,6 +73,24 @@ def wrap(text_value: str, max_chars: int, max_lines: int) -> list[str]:
     return lines[:max_lines]
 
 
+def load_sonnets() -> list[dict]:
+    data = yaml.safe_load((ROOT / "config" / "sonnets.yaml").read_text(encoding="utf-8"))
+    sonnets = data.get("sonnets", [])
+    if not sonnets:
+        raise RuntimeError("Sunday sonnet catalog is empty")
+    return sonnets
+
+
+def is_sunday(edition: str) -> bool:
+    return date.fromisoformat(edition).weekday() == 6
+
+
+def choose_sonnet(edition: str, sonnets: list[dict]) -> dict:
+    # ISO week makes the rotation stable across reruns of the same Sunday.
+    week = date.fromisoformat(edition).isocalendar().week
+    return sonnets[(week - 1) % len(sonnets)]
+
+
 def education_block(edition_date: str, forced: str) -> tuple[str, list[str]]:
     if forced in {"japanese", "geography"}:
         kind = forced
@@ -133,20 +151,34 @@ def main() -> None:
         '<line x1="0" y1="292" x2="800" y2="292" stroke="#000" stroke-width="2.5"/>',
     ]
 
-    row_y = [38, 82, 126, 170, 214, 258]
-    for idx, (name, y) in enumerate(zip(labels, row_y)):
-        item = validated["markets"][name]
-        value, delta, obs_date = format_market(name, item)
-        svg.append(svg_text(18, y, labels[name], typ["market_label"], 800))
-        svg.append(svg_text(300, y, value, typ["market_value"], 800, "end"))
-        svg.append(svg_text(322, y, delta, typ["market_delta"], 800))
-        if obs_date and obs_date != validated["expected_close_date"] and len(obs_date) >= 10:
-            svg.append(svg_text(486, y, obs_date[5:], 9, 700, "end", "#555"))
-        if idx < 5:
-            svg.append(
-                f'<line x1="16" y1="{y+13}" x2="490" y2="{y+13}" '
-                'stroke="#777" stroke-width=".8"/>'
-            )
+    sunday_mode = is_sunday(validated["edition_date"])
+    sonnet = choose_sonnet(validated["edition_date"], load_sonnets()) if sunday_mode else None
+
+    if sunday_mode:
+        svg += [
+            svg_text(18, 30, "DOMINGO · SONETO", 17, 800),
+            svg_text(18, 53, sonnet["title"], 15, 800),
+            svg_text(18, 72, sonnet["author"], 11, 650, fill="#666"),
+        ]
+        line_y = 94
+        for line in sonnet["lines"]:
+            svg.append(svg_text(22, line_y, line, 11, 600))
+            line_y += 13
+    else:
+        row_y = [38, 82, 126, 170, 214, 258]
+        for idx, (name, y) in enumerate(zip(labels, row_y)):
+            item = validated["markets"][name]
+            value, delta, obs_date = format_market(name, item)
+            svg.append(svg_text(18, y, labels[name], typ["market_label"], 800))
+            svg.append(svg_text(300, y, value, typ["market_value"], 800, "end"))
+            svg.append(svg_text(322, y, delta, typ["market_delta"], 800))
+            if obs_date and obs_date != validated["expected_close_date"] and len(obs_date) >= 10:
+                svg.append(svg_text(486, y, obs_date[5:], 9, 700, "end", "#555"))
+            if idx < 5:
+                svg.append(
+                    f'<line x1="16" y1="{y+13}" x2="490" y2="{y+13}" '
+                    'stroke="#777" stroke-width=".8"/>'
+                )
 
     svg += [
         svg_text(516, 34, validated["edition_date"], 21, 800),
@@ -155,22 +187,37 @@ def main() -> None:
         svg_text(516, 96, "Hechos", 13, 800),
     ]
 
-    for i, line in enumerate(validated["reading"]["facts"]):
-        svg.append(svg_text(520, 118 + i * 22, "• " + line, typ["reading_body"], 650))
+    if sunday_mode:
+        sunday_facts = [
+            f"Último cierre: {validated['expected_close_date']}.",
+            "Mercados ocultos hoy; manifest intacto.",
+        ]
+        sunday_interpretation = [sonnet["comment"]]
+        for i, line in enumerate(sunday_facts):
+            svg.append(svg_text(520, 118 + i * 22, "• " + line, typ["reading_body"], 650))
+        svg.append(svg_text(516, 192, "Comentario", 13, 800))
+        y = 214
+        for line in sunday_interpretation:
+            for j, wrapped in enumerate(wrap(line, 36, 4)):
+                prefix = "• " if j == 0 else "  "
+                svg.append(svg_text(520, y + j * 18, prefix + wrapped, typ["reading_body"], 650))
+    else:
+        for i, line in enumerate(validated["reading"]["facts"]):
+            svg.append(svg_text(520, 118 + i * 22, "• " + line, typ["reading_body"], 650))
 
-    svg.append(svg_text(516, 192, "Interpretación", 13, 800))
-    for i, line in enumerate(validated["reading"]["interpretation"]):
-        for j, wrapped in enumerate(wrap(line, 38, 2)):
-            prefix = "• " if j == 0 else "  "
-            svg.append(
-                svg_text(
-                    520,
-                    214 + (i * 38) + j * 18,
-                    prefix + wrapped,
-                    typ["reading_body"],
-                    650,
+        svg.append(svg_text(516, 192, "Interpretación", 13, 800))
+        for i, line in enumerate(validated["reading"]["interpretation"]):
+            for j, wrapped in enumerate(wrap(line, 38, 2)):
+                prefix = "• " if j == 0 else "  "
+                svg.append(
+                    svg_text(
+                        520,
+                        214 + (i * 38) + j * 18,
+                        prefix + wrapped,
+                        typ["reading_body"],
+                        650,
+                    )
                 )
-            )
 
     kind, block = education_block(validated["edition_date"], args.education_mode)
     if kind == "japanese":
