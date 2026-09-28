@@ -56,6 +56,9 @@ jobs:
       - name: Render forced Japanese test
         run: python src/render.py --education-mode japanese --output-prefix japanese_test
 
+      - name: Render Sunday sonnet regression
+        run: python src/render.py --edition-date 2026-09-27 --output-prefix sunday_test
+
       - name: Acceptance
         run: python src/acceptance.py
 
@@ -68,6 +71,8 @@ jobs:
             output/latest.svg
             output/japanese_test.png
             output/japanese_test.svg
+            output/sunday_test.png
+            output/sunday_test.svg
             output/latest_manifest.json
             output/validated.json
             output/raw.json

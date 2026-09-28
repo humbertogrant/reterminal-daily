@@ -64,6 +64,8 @@ class EditionCalendarTests(unittest.TestCase):
     def test_previous_session_respects_weekends_and_exchange_holidays(self):
         for edition, expected in (
             ("2026-09-24", "2026-09-23"),
+            ("2026-09-26", "2026-09-25"),  # Saturday edition
+            ("2026-09-27", "2026-09-25"),  # Sunday edition
             ("2026-09-28", "2026-09-25"),
             ("2026-09-08", "2026-09-04"),  # Labor Day
             ("2026-04-06", "2026-04-02"),  # Good Friday

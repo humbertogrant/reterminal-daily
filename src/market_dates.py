@@ -25,10 +25,19 @@ def expected_close_date(edition: str) -> str:
     Never promote same-day quotes, even if a manual run occurs after the close.
     The calendar, not a source's newest row, determines freshness. Treasury and
     Costa Rica holidays can differ; preserve and label older observations then.
+
+    The calendar window deliberately extends beyond the requested date. On a
+    weekend or holiday, exchange_calendars otherwise bounds the calendar at the
+    last actual session and date_to_session() can reject the intervening
+    non-session date as out of range.
     """
     day = date.fromisoformat(edition)
+    previous_day = day - timedelta(days=1)
     calendar = calendars.get_calendar(
-        "XNYS", start=day - timedelta(days=370), end=day
+        "XNYS",
+        start=previous_day - timedelta(days=370),
+        end=previous_day + timedelta(days=14),
     )
-    previous_day = (day - timedelta(days=1)).isoformat()
-    return calendar.date_to_session(previous_day, direction="previous").date().isoformat()
+    return calendar.date_to_session(
+        previous_day.isoformat(), direction="previous"
+    ).date().isoformat()
