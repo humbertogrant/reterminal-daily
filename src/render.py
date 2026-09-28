@@ -120,6 +120,10 @@ def parse_args() -> argparse.Namespace:
         choices=("auto", "japanese", "geography"),
         default="auto",
     )
+    parser.add_argument(
+        "--edition-date",
+        help="Override validated edition date for deterministic visual regression tests.",
+    )
     parser.add_argument("--output-prefix", default="latest")
     return parser.parse_args()
 
@@ -127,6 +131,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     validated = json.loads((OUT / "validated.json").read_text(encoding="utf-8"))
+    if args.edition_date:
+        validated["edition_date"] = args.edition_date
     layout = yaml.safe_load((ROOT / "config" / "layout.yaml").read_text(encoding="utf-8"))
     cities = yaml.safe_load((ROOT / "config" / "cities.yaml").read_text(encoding="utf-8"))
     typ = layout["typography"]
