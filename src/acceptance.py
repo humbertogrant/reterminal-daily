@@ -113,9 +113,11 @@ def main() -> None:
 
     assert_png("latest.png")
     assert_png("japanese_test.png")
+    assert_png("sunday_test.png")
 
     svg = (OUT / "latest.svg").read_text(encoding="utf-8")
     jp_svg = (OUT / "japanese_test.svg").read_text(encoding="utf-8")
+    sunday_svg = (OUT / "sunday_test.svg").read_text(encoding="utf-8")
 
     assert 'clipPath id="narrativeClip"' in svg, "Narrative clipping guard missing"
     assert 'width="800" height="480"' in svg, "SVG canvas is not 800x480"
@@ -127,6 +129,10 @@ def main() -> None:
     assert "この本がいちばん高いです。" in jp_svg, "Japanese answer missing"
     assert "Noto Sans CJK JP" in jp_svg, "Japanese test lacks CJK font family"
 
+    assert "DOMINGO · SONETO" in sunday_svg, "Sunday test did not enter sonnet mode"
+    assert "Mercados ocultos hoy; manifest intacto." in sunday_svg, "Sunday data-state note missing"
+    assert "Comentario" in sunday_svg, "Sunday reading comment missing"
+
     # Avoid editorially meaningless negative zero.
     assert "-0.00%" not in svg, "Negative zero leaked into production SVG"
     assert "-0.00%" not in jp_svg, "Negative zero leaked into Japanese test SVG"
@@ -135,7 +141,7 @@ def main() -> None:
     assert font_sizes and min(font_sizes) >= 8, "Typography fell below 8 px"
 
     print(
-        f"Acceptance PASS: quality={status}; latest + Japanese test 800x480; "
+        f"Acceptance PASS: quality={status}; latest + Japanese + Sunday tests 800x480; "
         "SVG guards and zero normalization present."
     )
 
