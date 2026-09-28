@@ -166,10 +166,12 @@ def main() -> None:
             svg_text(18, 53, sonnet["title"], 15, 800),
             svg_text(18, 72, sonnet["author"], 11, 650, fill="#666"),
         ]
-        line_y = 94
-        for line in sonnet["lines"]:
-            svg.append(svg_text(22, line_y, line, 11, 600))
-            line_y += 13
+        line_y = 92
+        for index, line in enumerate(sonnet["lines"], start=1):
+            svg.append(svg_text(22, line_y, line, 11.5, 600))
+            line_y += 12.5
+            if index in {4, 8, 11}:
+                line_y += 3
     else:
         row_y = [38, 82, 126, 170, 214, 258]
         for idx, (name, y) in enumerate(zip(labels, row_y)):
