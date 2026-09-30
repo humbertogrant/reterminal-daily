@@ -7,7 +7,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "10 12 * * *" # 06:10 America/Costa_Rica
+    - cron: "23 6 * * *" # 00:23 America/Costa_Rica; buffer for GitHub schedule delays
 
 permissions:
   contents: read
